@@ -1,0 +1,32 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "COLLE_TA_CLE_N8N_ICI"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à contacter').item.json.email, entreprise: $('Prospects à contacter').item.json.entreprise, contact_nom: $('Prospects à contacter').item.json.contact_nom, secteur: $('Prospects à contacter').item.json.secteur, objet: 'Premier contact' }) }}",
+        "options": {}
+      },
+      "id": "4fafe974-7d6f-4fc0-bfc5-d868c626d9b1",
+      "name": "Enregistrer dans la plateforme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {}
+}

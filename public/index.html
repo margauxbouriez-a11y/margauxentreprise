@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plateforme — Margaux Entreprise</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2e2a'/%3E%3Ccircle cx='10' cy='16' r='4' fill='%23e8a33d'/%3E%3Ccircle cx='22' cy='10' r='3' fill='%23fff'/%3E%3Ccircle cx='22' cy='22' r='3' fill='%23fff'/%3E%3Cpath d='M13.5 14.5 19.5 11M13.5 17.5l6 3.5' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app">
+  <aside class="barre">
+    <div class="marque">
+      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#17403a"/><circle cx="10" cy="16" r="4" fill="#e8a33d"/><circle cx="22" cy="10" r="3" fill="#fff"/><circle cx="22" cy="22" r="3" fill="#fff"/><path d="M13.5 14.5 19.5 11M13.5 17.5l6 3.5" stroke="#fff" stroke-width="1.6"/></svg>
+      <div><strong>Margaux</strong><span>IA &amp; automatisation</span></div>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <button data-onglet="tableau">Tableau de bord</button>
+      <button data-onglet="demarchage">Démarchage <span class="compteur" id="nb-prospects">0</span></button>
+      <button data-onglet="n8n">Automatisation n8n</button>
+      <button disabled title="Prochain module">Clients <span class="bientot">bientôt</span></button>
+      <button disabled title="Prochain module">Projets <span class="bientot">bientôt</span></button>
+    </nav>
+    <div class="pied-barre">
+      <div class="etat-n8n"><span class="pastille" id="pastille-n8n"></span><span id="texte-n8n">n8n : aucun envoi reçu</span></div>
+      <button class="lien-discret" id="deconnexion">Se déconnecter</button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ===== Tableau de bord ===== -->
+    <section data-vue="tableau" hidden>
+      <div class="entete">
+        <div>
+          <h1>Tableau de bord</h1>
+          <p>Où en est ta prospection, et ce qu'il reste à faire aujourd'hui.</p>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="carte kpi"><span>Entreprises dans le fichier</span><b id="k-total">0</b></div>
+        <div class="carte kpi"><span>Emails envoyés sur 7 jours</span><b id="k-emails7">0</b></div>
+        <div class="carte kpi"><span>Taux de réponse</span><b id="k-taux">0 %</b></div>
+        <div class="carte kpi" id="kpi-relances"><span>Relances à faire</span><b id="k-relances">0</b></div>
+      </div>
+      <div class="grille-2">
+        <div class="carte bloc">
+          <h2>Emails envoyés, 14 derniers jours</h2>
+          <div class="histo" id="histo"></div>
+        </div>
+        <div class="carte bloc">
+          <h2>Par secteur</h2>
+          <div class="secteurs" id="secteurs"></div>
+        </div>
+      </div>
+      <div class="carte bloc" style="margin-top:18px">
+        <h2>Dernières activités</h2>
+        <ul class="flux" id="flux"></ul>
+      </div>
+    </section>
+
+    <!-- ===== Démarchage ===== -->
+    <section data-vue="demarchage" hidden>
+      <div class="entete">
+        <div>
+          <h1>Démarchage</h1>
+          <p>Les entreprises démarchées et leurs contacts. Les envois faits par n8n s'ajoutent ici automatiquement.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn" href="/api/export.csv">Exporter en CSV</a>
+          <button class="btn principal" id="ajouter">Ajouter une entreprise</button>
+        </div>
+      </div>
+
+      <div class="pipeline" id="pipeline" role="group" aria-label="Filtrer par étape"></div>
+
+      <div class="filtres">
+        <input type="search" id="recherche" placeholder="Rechercher une entreprise, un contact, un email, une ville…" aria-label="Rechercher">
+        <select id="filtre-secteur" aria-label="Filtrer par secteur"><option value="">Tous les secteurs</option></select>
+      </div>
+
+      <div class="carte">
+        <div class="tableau-wrap">
+          <table>
+            <thead><tr>
+              <th>Entreprise</th><th>Contact</th><th>Statut</th><th class="col-option">Emails</th><th class="col-option">Prochaine relance</th>
+            </tr></thead>
+            <tbody id="lignes"></tbody>
+          </table>
+        </div>
+        <div class="vide" id="vide" hidden></div>
+      </div>
+    </section>
+
+    <!-- ===== n8n ===== -->
+    <section data-vue="n8n" hidden>
+      <div class="entete">
+        <div>
+          <h1>Automatisation n8n</h1>
+          <p>Relie ton workflow d'envoi d'emails à la plateforme : chaque email envoyé met à jour l'onglet Démarchage.</p>
+        </div>
+        <a class="btn ambre" href="/n8n/workflow-demarchage.json" download>Télécharger le workflow complet</a>
+      </div>
+
+      <div class="avertissement" id="alerte-cle" hidden style="margin-bottom:16px">
+        Ta clé de connexion est encore celle par défaut. Définis la variable <b>N8N_API_KEY</b> sur ton hébergement avant d'utiliser la plateforme en vrai.
+      </div>
+
+      <div class="etapes-n8n">
+        <div class="carte etape-n8n">
+          <h2>Ajoute ce nœud juste après ton nœud d'envoi d'email</h2>
+          <p>Copie le bloc ci-dessous, puis colle-le (Ctrl + V / Cmd + V) dans ton workflow n8n. Relie la sortie de ton nœud « Send Email » ou « Gmail » à ce nouveau nœud. Si ton nœud qui contient l'email du destinataire ne s'appelle pas « Prospects à contacter », remplace ce nom dans le champ Body.</p>
+          <div>
+            <pre id="noeud-json"></pre>
+            <button class="btn" data-copier="noeud-json">Copier le nœud</button>
+          </div>
+        </div>
+
+        <div class="carte etape-n8n">
+          <h2>Vérifie l'adresse et la clé</h2>
+          <p>Elles sont déjà dans le nœud copié. Garde la clé secrète : elle permet d'écrire dans ta base de prospects.</p>
+          <div>
+            <div class="champ-copie"><code id="url-envoi"></code><button class="btn petit" data-copier="url-envoi">Copier</button></div>
+            <div class="champ-copie"><code id="cle-api"></code><button class="btn petit" data-copier="cle-api">Copier</button></div>
+          </div>
+        </div>
+
+        <div class="carte etape-n8n">
+          <h2>Lance ton workflow une fois</h2>
+          <p>Dès que le premier email part, l'entreprise apparaît dans Démarchage avec le statut « Contactée » et une relance prévue. Le témoin en bas de la barre latérale passe au vert.</p>
+          <div>
+            <table class="points">
+              <tbody id="points"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Panneau prospect -->
+<div class="voile" id="voile"></div>
+<aside class="panneau" id="panneau" aria-hidden="true" aria-labelledby="panneau-titre">
+  <header>
+    <div>
+      <h2 id="panneau-titre">Nouvelle entreprise</h2>
+      <div class="sous" id="panneau-sous"></div>
+    </div>
+    <button class="fermer" id="fermer" aria-label="Fermer">×</button>
+  </header>
+  <div class="corps">
+    <form class="form" id="form-prospect">
+      <label class="large">Entreprise *<input type="text" name="entreprise" required></label>
+      <label>Secteur<input type="text" name="secteur" list="liste-secteurs"></label>
+      <label>Ville<input type="text" name="ville"></label>
+      <label>Nom du contact<input type="text" name="contact_nom"></label>
+      <label>Poste<input type="text" name="contact_poste"></label>
+      <label>Email<input type="email" name="email"></label>
+      <label>Téléphone<input type="tel" name="telephone"></label>
+      <label>Site web<input type="text" name="site_web"></label>
+      <label>Statut<select name="statut" id="select-statut"></select></label>
+      <label>Prochaine relance<input type="date" name="prochaine_relance"></label>
+      <label class="large">Notes<textarea name="notes"></textarea></label>
+    </form>
+    <datalist id="liste-secteurs"></datalist>
+
+    <div id="zone-suivi" hidden>
+      <div class="actions-rapides">
+        <button class="btn petit" id="noter-email">J'ai envoyé un email</button>
+        <button class="btn petit" data-statut-rapide="repondu">A répondu</button>
+        <button class="btn petit" data-statut-rapide="rdv">RDV pris</button>
+        <button class="btn petit" data-statut-rapide="client">Devenu client</button>
+      </div>
+    </div>
+
+    <div class="historique" id="zone-historique" hidden>
+      <h3>Historique</h3>
+      <form id="form-note" style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" id="note-texte" placeholder="Ajouter une note (appel, réponse, info…)" aria-label="Nouvelle note">
+        <button class="btn petit">Ajouter</button>
+      </form>
+      <ul class="flux" id="historique"></ul>
+    </div>
+  </div>
+  <footer>
+    <button class="btn danger" id="supprimer" hidden>Supprimer</button>
+    <span></span>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="annuler">Annuler</button>
+      <button class="btn principal" id="enregistrer">Enregistrer</button>
+    </div>
+  </footer>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>

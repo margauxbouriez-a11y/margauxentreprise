@@ -1,0 +1,26 @@
+# Déploiement en un clic sur Render (New > Blueprint > choisir ce dépôt)
+services:
+  - type: web
+    name: margauxentreprise
+    runtime: node
+    plan: starter          # le disque persistant n'existe pas sur l'offre gratuite
+    buildCommand: echo "Aucune dépendance à installer"
+    startCommand: node --no-warnings server.js
+    healthCheckPath: /sante
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: N8N_API_KEY
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/plateforme.db
+    disk:
+      name: donnees
+      mountPath: /var/data
+      sizeGB: 1

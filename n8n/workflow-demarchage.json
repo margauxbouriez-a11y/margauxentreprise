@@ -1,0 +1,261 @@
+{
+  "name": "Démarchage — envoi et suivi",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "65279cd1-6f44-40a2-b975-8ec7a826847a",
+      "name": "Chaque matin (lun-ven 9h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/prospects?limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "COLLE_TA_CLE_N8N_ICI"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "36c9d47c-5690-425a-916b-87d776753d04",
+      "name": "Prospects à contacter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.entreprise }} : quelques heures par semaine à récupérer ?",
+        "emailType": "html",
+        "message": "={{ $json.contact_nom ? 'Bonjour ' + $json.contact_nom + ',' : 'Bonjour,' }}<br><br>Dans beaucoup de cabinets comme {{ $json.entreprise }}, une bonne partie de la semaine part encore dans des tâches répétitives : relancer les clients pour leurs pièces, trier les factures reçues par email, ressaisir des informations d'un outil à l'autre.<br><br>Je conçois des automatisations sur mesure (IA + n8n) qui prennent ces tâches en charge, branchées sur vos outils actuels, sans changer vos habitudes de travail.<br><br>Seriez-vous disponible 15 minutes la semaine prochaine ? Je vous montre un exemple concret adapté à votre cabinet.<br><br><p>Belle journée,<br>[Ton prénom]<br>[Nom de ton entreprise] — IA &amp; automatisation<br>[Ton téléphone]</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "340d74bd-8918-43a9-8253-ea56d47acfbc",
+      "name": "Envoyer le premier email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        520,
+        0
+      ],
+      "notes": "Connecte ton compte Gmail ici (ou remplace par un nœud Send Email / SMTP)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "COLLE_TA_CLE_N8N_ICI"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à contacter').item.json.email, entreprise: $('Prospects à contacter').item.json.entreprise, contact_nom: $('Prospects à contacter').item.json.contact_nom, secteur: $('Prospects à contacter').item.json.secteur, objet: 'Premier contact' }) }}",
+        "options": {}
+      },
+      "id": "999efbca-2296-4a07-ab5b-3688abdb7025",
+      "name": "Enregistrer dans la plateforme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "29f696c3-670d-4bab-84f2-32ddf7856218",
+      "name": "Chaque matin (lun-ven 10h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/relances?limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "COLLE_TA_CLE_N8N_ICI"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f2a1269-b2d0-4802-b8ec-2967400e3a89",
+      "name": "Prospects à relancer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Re: {{ $json.entreprise }} : quelques heures par semaine à récupérer ?",
+        "emailType": "html",
+        "message": "={{ $json.contact_nom ? 'Bonjour ' + $json.contact_nom + ',' : 'Bonjour,' }}<br><br>Je me permets de revenir vers vous au sujet de mon précédent message. Un exemple concret : chez un cabinet de taille comparable à {{ $json.entreprise }}, l'automatisation des relances de pièces justificatives a libéré plusieurs heures par semaine à l'équipe.<br><br>Si le sujet vous intéresse, répondez simplement à cet email avec un créneau qui vous convient.<br><br><p>Belle journée,<br>[Ton prénom]<br>[Nom de ton entreprise] — IA &amp; automatisation<br>[Ton téléphone]</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "8239f1de-63b5-4276-92c7-d7441a133231",
+      "name": "Envoyer la relance",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        520,
+        260
+      ],
+      "notes": "Connecte ton compte Gmail ici (ou remplace par un nœud Send Email / SMTP)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "COLLE_TA_CLE_N8N_ICI"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à relancer').item.json.email, entreprise: $('Prospects à relancer').item.json.entreprise, contact_nom: $('Prospects à relancer').item.json.contact_nom, secteur: $('Prospects à relancer').item.json.secteur, objet: 'Relance' }) }}",
+        "options": {}
+      },
+      "id": "36da4718-81bf-4949-a43f-7345a3981113",
+      "name": "Enregistrer la relance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Chaque matin (lun-ven 9h)": {
+      "main": [
+        [
+          {
+            "node": "Prospects à contacter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prospects à contacter": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le premier email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer le premier email": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer dans la plateforme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque matin (lun-ven 10h)": {
+      "main": [
+        [
+          {
+            "node": "Prospects à relancer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prospects à relancer": {
+      "main": [
+        [
+          {
+            "node": "Envoyer la relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer la relance": {
+      "main": [
+        [
+          {
+            "node": "Enregistrer la relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
