@@ -3,6 +3,7 @@ services:
   - type: web
     name: margauxentreprise
     runtime: node
+    region: frankfurt      # serveur en Europe (plus rapide depuis la France, données dans l'UE)
     plan: starter          # le disque persistant n'existe pas sur l'offre gratuite
     buildCommand: echo "Aucune dépendance à installer"
     startCommand: node --no-warnings server.js
