@@ -3,7 +3,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "url": "https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -15,7 +15,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à contacter').item.json.email, entreprise: $('Prospects à contacter').item.json.entreprise, contact_nom: $('Prospects à contacter').item.json.contact_nom, secteur: $('Prospects à contacter').item.json.secteur, objet: 'Premier contact' }) }}",
+        "jsonBody": "={{ JSON.stringify({ action: 'n8n_email_envoye', email: $('Prospects à contacter').item.json.email, entreprise: $('Prospects à contacter').item.json.entreprise, contact_nom: $('Prospects à contacter').item.json.contact_nom, secteur: $('Prospects à contacter').item.json.secteur, objet: 'Premier contact' }) }}",
         "options": {}
       },
       "id": "4fafe974-7d6f-4fc0-bfc5-d868c626d9b1",

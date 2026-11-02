@@ -23,7 +23,8 @@
     },
     {
       "parameters": {
-        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/prospects?limit=20",
+        "method": "POST",
+        "url": "https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -33,6 +34,9 @@
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: 'n8n_prospects', limit: 20 }) }}",
         "options": {}
       },
       "id": "36c9d47c-5690-425a-916b-87d776753d04",
@@ -69,7 +73,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "url": "https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -81,7 +85,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à contacter').item.json.email, entreprise: $('Prospects à contacter').item.json.entreprise, contact_nom: $('Prospects à contacter').item.json.contact_nom, secteur: $('Prospects à contacter').item.json.secteur, objet: 'Premier contact' }) }}",
+        "jsonBody": "={{ JSON.stringify({ action: 'n8n_email_envoye', envois: $input.all().map((_, i) => { const p = $('Prospects à contacter').all()[i].json; return { id: p.id, email: p.email, entreprise: p.entreprise, objet: 'Premier contact' }; }) }) }}",
         "options": {}
       },
       "id": "999efbca-2296-4a07-ab5b-3688abdb7025",
@@ -91,7 +95,9 @@
       "position": [
         780,
         0
-      ]
+      ],
+      "executeOnce": true,
+      "notes": "Enregistre tous les emails envoyés en une seule demande (une seule exécution n8n côté plateforme)."
     },
     {
       "parameters": {
@@ -115,7 +121,8 @@
     },
     {
       "parameters": {
-        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/relances?limit=20",
+        "method": "POST",
+        "url": "https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -125,6 +132,9 @@
             }
           ]
         },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: 'n8n_relances', limit: 20 }) }}",
         "options": {}
       },
       "id": "2f2a1269-b2d0-4802-b8ec-2967400e3a89",
@@ -161,7 +171,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://TA-PLATEFORME.exemple.com/api/n8n/email-envoye",
+        "url": "https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -173,7 +183,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ email: $('Prospects à relancer').item.json.email, entreprise: $('Prospects à relancer').item.json.entreprise, contact_nom: $('Prospects à relancer').item.json.contact_nom, secteur: $('Prospects à relancer').item.json.secteur, objet: 'Relance' }) }}",
+        "jsonBody": "={{ JSON.stringify({ action: 'n8n_email_envoye', envois: $input.all().map((_, i) => { const p = $('Prospects à relancer').all()[i].json; return { id: p.id, email: p.email, entreprise: p.entreprise, objet: 'Relance' }; }) }) }}",
         "options": {}
       },
       "id": "36da4718-81bf-4949-a43f-7345a3981113",
@@ -183,7 +193,9 @@
       "position": [
         780,
         260
-      ]
+      ],
+      "executeOnce": true,
+      "notes": "Enregistre tous les emails envoyés en une seule demande (une seule exécution n8n côté plateforme)."
     }
   ],
   "connections": {

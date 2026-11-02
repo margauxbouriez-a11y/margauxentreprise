@@ -14,18 +14,38 @@ const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const echap = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const etat = { prospects: [], filtreStatut: '', secteur: '', q: '', courant: null, config: null };
+const etat = { prospects: [], filtreStatut: '', secteur: '', q: '', courant: null, config: null, donnees: null };
 
-async function appel(url, options = {}) {
-  const r = await fetch(url, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  if (r.status === 401 && !url.startsWith('/connexion')) { location.href = '/connexion'; throw new Error('Session expirée'); }
+// ---------- Connexion à l'API n8n ----------
+const lireMdp = () => { try { return localStorage.getItem('plateforme-mdp') || sessionStorage.getItem('plateforme-mdp'); } catch { return null; } };
+const oublierMdp = () => { try { localStorage.removeItem('plateforme-mdp'); sessionStorage.removeItem('plateforme-mdp'); } catch {} };
+const MDP = lireMdp();
+if (!MDP) location.replace('connexion.html' + location.hash);
+
+async function appel(action, donnees = {}) {
+  let r;
+  try {
+    r = await fetch(window.PLATEFORME.api, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, mdp: MDP, ...donnees }),
+    });
+  } catch {
+    throw new Error('Le serveur ne répond pas. Vérifie ta connexion internet, puis réessaie.');
+  }
+  if (r.status === 401) { oublierMdp(); location.href = 'connexion.html'; throw new Error('Mot de passe à ressaisir'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.erreur || `Erreur ${r.status}`);
   return data;
+}
+
+// Toutes les données de l'écran en une seule demande (une exécution n8n)
+let chargement = null;
+function chargerEtat() {
+  chargement ||= appel('etat', { limit: 12 })
+    .then((d) => { etat.donnees = d; etat.config = d.config; majTemoinN8n(); return d; })
+    .finally(() => { chargement = null; });
+  return chargement;
 }
 
 function toast(msg, erreur = false) {
@@ -62,15 +82,16 @@ function afficher(onglet) {
     else b.removeAttribute('aria-current');
   });
   history.replaceState(null, '', '#' + onglet);
-  if (onglet === 'tableau') chargerTableau();
-  if (onglet === 'demarchage') chargerProspects();
-  if (onglet === 'n8n') chargerN8n();
+  const erreur = (e) => toast(e.message, true);
+  if (onglet === 'tableau') chargerTableau().catch(erreur);
+  if (onglet === 'demarchage') chargerProspects().catch(erreur);
+  if (onglet === 'n8n') chargerN8n().catch(erreur);
 }
 $$('[data-onglet]').forEach((b) => b.addEventListener('click', () => afficher(b.dataset.onglet)));
 
 // ---------- Tableau de bord ----------
 async function chargerTableau() {
-  const [s, activites] = await Promise.all([appel('/api/stats'), appel('/api/activites?limit=12')]);
+  const { stats: s, activites } = await chargerEtat();
   $('#k-total').textContent = s.total;
   $('#k-emails7').textContent = s.emails7j;
   $('#k-taux').textContent = s.tauxReponse + ' %';
@@ -103,10 +124,8 @@ function ligneActivite(a) {
 }
 
 // ---------- Démarchage ----------
-async function chargerProspects() {
-  const [prospects, stats, secteurs] = await Promise.all([
-    appel('/api/prospects'), appel('/api/stats'), appel('/api/secteurs'),
-  ]);
+async function chargerProspects(donnees) {
+  const { prospects, stats, secteurs } = donnees || await chargerEtat();
   etat.prospects = prospects;
   $('#nb-prospects').textContent = stats.total;
 
@@ -115,7 +134,7 @@ async function chargerProspects() {
       <b>${stats.parStatut[k] || 0}</b><span>${v}</span></button>`).join('');
   $$('#pipeline .etape').forEach((b) => b.addEventListener('click', () => {
     etat.filtreStatut = etat.filtreStatut === b.dataset.statut ? '' : b.dataset.statut;
-    chargerProspects();
+    chargerProspects(etat.donnees);
   }));
 
   const sel = $('#filtre-secteur');
@@ -144,13 +163,13 @@ function rendreLignes() {
   } else if (!liste.length) {
     vide.hidden = false;
     vide.innerHTML = `<h3>Aucun résultat</h3><p>Aucune entreprise ne correspond à ces filtres.</p><button class="btn" id="raz">Effacer les filtres</button>`;
-    $('#raz').onclick = () => { etat.filtreStatut = ''; etat.secteur = ''; etat.q = ''; $('#recherche').value = ''; chargerProspects(); };
+    $('#raz').onclick = () => { etat.filtreStatut = ''; etat.secteur = ''; etat.q = ''; $('#recherche').value = ''; chargerProspects(etat.donnees); };
   } else vide.hidden = true;
 
   const auj = aujourdhui();
   $('#lignes').innerHTML = liste.map((p) => {
     const enRetard = p.prochaine_relance && p.prochaine_relance <= auj && ['contacte', 'relance'].includes(p.statut);
-    return `<tr data-id="${p.id}" tabindex="0">
+    return `<tr data-id="${echap(p.id)}" tabindex="0">
       <td><div class="nom-ent">${echap(p.entreprise)}${p.source === 'n8n' ? '<span class="src-n8n">n8n</span>' : ''}</div>
         <div class="sous">${echap([p.secteur, p.ville].filter(Boolean).join(', '))}</div></td>
       <td><div>${echap(p.contact_nom || '—')}${p.contact_poste ? `<span class="sous">, ${echap(p.contact_poste)}</span>` : ''}</div>
@@ -161,7 +180,7 @@ function rendreLignes() {
     </tr>`;
   }).join('');
   $$('#lignes tr').forEach((tr) => {
-    const ouvrirLigne = () => ouvrir(etat.prospects.find((p) => p.id === Number(tr.dataset.id)));
+    const ouvrirLigne = () => ouvrir(etat.prospects.find((p) => p.id === tr.dataset.id));
     tr.addEventListener('click', ouvrirLigne);
     tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') ouvrirLigne(); });
   });
@@ -203,12 +222,12 @@ $('#voile').onclick = fermer;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fermer(); });
 
 async function chargerHistorique(id) {
-  const a = await appel(`/api/prospects/${id}/activites`);
+  const a = await appel('historique', { id });
   $('#historique').innerHTML = a.map((x) => ligneActivite({ ...x, entreprise: null })).join('') || '<li><span></span><span class="sous">Rien pour l\'instant.</span><span></span></li>';
 }
 
 async function rafraichirCourant(id) {
-  await chargerProspects();
+  await chargerProspects().catch((e) => toast(e.message, true));
   const p = etat.prospects.find((x) => x.id === id);
   if (p) ouvrir(p);
 }
@@ -217,74 +236,116 @@ $('#enregistrer').onclick = async () => {
   const f = $('#form-prospect');
   if (!f.reportValidity()) return;
   const data = Object.fromEntries(new FormData(f));
+  const bouton = $('#enregistrer');
+  bouton.disabled = true;
   try {
     if (etat.courant) {
-      await appel(`/api/prospects/${etat.courant.id}`, { method: 'PUT', body: data });
+      await appel('modifier', { id: etat.courant.id, data });
       toast('Modifications enregistrées');
     } else {
-      await appel('/api/prospects', { method: 'POST', body: data });
+      await appel('creer', { data });
       toast('Entreprise ajoutée');
     }
+    fermer();
+    chargerProspects().catch(() => {});
+  } catch (e) { toast(e.message, true); }
+  finally { bouton.disabled = false; }
+};
+
+$('#supprimer').onclick = async () => {
+  if (!etat.courant || !confirm(`Supprimer ${etat.courant.entreprise} et son historique ?`)) return;
+  try {
+    await appel('supprimer', { id: etat.courant.id });
+    toast('Entreprise supprimée');
     fermer();
     chargerProspects();
   } catch (e) { toast(e.message, true); }
 };
 
-$('#supprimer').onclick = async () => {
-  if (!etat.courant || !confirm(`Supprimer ${etat.courant.entreprise} et son historique ?`)) return;
-  await appel(`/api/prospects/${etat.courant.id}`, { method: 'DELETE' });
-  toast('Entreprise supprimée');
-  fermer();
-  chargerProspects();
-};
-
 $('#noter-email').onclick = async () => {
   const id = etat.courant.id;
-  await appel(`/api/prospects/${id}/email`, { method: 'POST', body: {} });
-  toast('Email noté, relance programmée');
-  rafraichirCourant(id);
+  try {
+    await appel('email', { id });
+    toast('Email noté, relance programmée');
+    rafraichirCourant(id);
+  } catch (e) { toast(e.message, true); }
 };
 $$('[data-statut-rapide]').forEach((b) => b.addEventListener('click', async () => {
   const id = etat.courant.id;
-  await appel(`/api/prospects/${id}`, { method: 'PUT', body: { statut: b.dataset.statutRapide } });
-  toast(`Statut : ${STATUTS[b.dataset.statutRapide]}`);
-  rafraichirCourant(id);
+  try {
+    await appel('modifier', { id, data: { statut: b.dataset.statutRapide } });
+    toast(`Statut : ${STATUTS[b.dataset.statutRapide]}`);
+    rafraichirCourant(id);
+  } catch (e) { toast(e.message, true); }
 }));
 $('#form-note').addEventListener('submit', async (e) => {
   e.preventDefault();
   const texte = $('#note-texte').value.trim();
   if (!texte) return;
-  await appel(`/api/prospects/${etat.courant.id}/note`, { method: 'POST', body: { texte } });
-  $('#note-texte').value = '';
-  chargerHistorique(etat.courant.id);
+  try {
+    await appel('note', { id: etat.courant.id, texte });
+    $('#note-texte').value = '';
+    chargerHistorique(etat.courant.id);
+  } catch (err) { toast(err.message, true); }
 });
 
 // ---------- n8n ----------
-async function chargerConfig() {
-  etat.config = await appel('/api/config');
+function majTemoinN8n() {
   const c = etat.config;
+  if (!c) return;
   const ok = !!c.dernierN8n;
   $('#pastille-n8n').classList.toggle('ok', ok);
   $('#texte-n8n').textContent = ok ? `n8n : dernier envoi ${ilYa(c.dernierN8n)}` : 'n8n : aucun envoi reçu';
-  return c;
+}
+
+// Modèles du dossier n8n/, complétés avec l'adresse et la clé
+async function modeleN8n(fichier) {
+  const r = await fetch(`n8n/${fichier}`, { cache: 'no-cache' });
+  if (!r.ok) throw new Error('Modèle n8n introuvable.');
+  return (await r.text())
+    .replaceAll('https://TA-PLATEFORME.exemple.com/webhook/margaux-entreprise', window.PLATEFORME.api)
+    .replaceAll('COLLE_TA_CLE_N8N_ICI', etat.config.cle);
 }
 
 async function chargerN8n() {
-  const c = await chargerConfig();
-  $('#alerte-cle').hidden = !c.cleParDefaut;
-  $('#url-envoi').textContent = `${c.base}/api/n8n/email-envoye`;
+  if (!etat.config) await chargerEtat();
+  const c = etat.config;
+  $('#url-envoi').textContent = window.PLATEFORME.api;
   $('#cle-api').textContent = c.cle;
-  const noeud = await fetch('/n8n/noeud-email-envoye.json').then((r) => r.text());
-  $('#noeud-json').textContent = noeud;
+  $('#noeud-json').textContent = await modeleN8n('noeud-email-envoye.json').catch((e) => e.message);
   const points = [
-    ['POST /api/n8n/email-envoye', 'Après chaque email : ajoute l\'entreprise si besoin, compte l\'envoi, programme la relance.'],
-    ['GET /api/n8n/prospects', 'Liste des entreprises « À contacter » pour que n8n leur écrive (paramètres : limit, secteur).'],
-    ['GET /api/n8n/relances', 'Entreprises à relancer aujourd\'hui.'],
-    ['POST /api/n8n/prospects', 'Ajoute ou met à jour une ou plusieurs entreprises (ex. depuis Google Sheets).'],
-    ['POST /api/n8n/reponse', 'Quand une entreprise répond : passe son statut à « A répondu ».'],
+    ['n8n_email_envoye', 'Après chaque email : ajoute l\'entreprise si besoin, compte l\'envoi, programme la relance. Accepte aussi une liste « envois » pour tout enregistrer en une fois.'],
+    ['n8n_prospects', 'Liste des entreprises « À contacter » pour que n8n leur écrive (options : limit, secteur).'],
+    ['n8n_relances', 'Entreprises à relancer aujourd\'hui (option : limit).'],
+    ['n8n_ajouter', 'Ajoute ou met à jour une ou plusieurs entreprises (champ « prospects », ex. depuis Google Sheets).'],
+    ['n8n_reponse', 'Quand une entreprise répond : passe son statut à « A répondu ».'],
   ];
-  $('#points').innerHTML = points.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  $('#points').innerHTML = points.map(([a, b]) => `<tr><td>action : ${a}</td><td>${b}</td></tr>`).join('');
 }
+
+function telecharger(nom, contenu, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([contenu], { type }));
+  a.download = nom;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+$('#telecharger-workflow').onclick = async () => {
+  try {
+    if (!etat.config) await chargerEtat();
+    telecharger('workflow-demarchage.json', await modeleN8n('workflow-demarchage.json'), 'application/json');
+  } catch (e) { toast(e.message, true); }
+};
+
+$('#exporter').onclick = () => {
+  const cols = ['entreprise', 'secteur', 'contact_nom', 'contact_poste', 'email', 'telephone', 'ville', 'site_web',
+    'statut', 'emails_envoyes', 'dernier_contact', 'prochaine_relance', 'notes'];
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lignes = etat.prospects.slice().sort((a, b) => a.entreprise.localeCompare(b.entreprise, 'fr'));
+  const csv = [cols.join(';'), ...lignes.map((r) => cols.map((c) => esc(r[c])).join(';'))].join('\n');
+  telecharger('prospects.csv', '\ufeff' + csv, 'text/csv;charset=utf-8');
+};
 
 $$('[data-copier]').forEach((b) => b.addEventListener('click', async () => {
   try {
@@ -293,13 +354,25 @@ $$('[data-copier]').forEach((b) => b.addEventListener('click', async () => {
   } catch { toast('Copie impossible : sélectionne le texte à la main', true); }
 }));
 
-$('#deconnexion').onclick = async () => { await appel('/deconnexion', { method: 'POST' }); location.href = '/connexion'; };
+$('#deconnexion').onclick = () => { oublierMdp(); location.href = 'connexion.html'; };
 
 // ---------- Démarrage ----------
-const depart = ['tableau', 'demarchage', 'n8n'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'demarchage';
-afficher(depart);
-chargerConfig();
-setInterval(() => {
-  chargerConfig();
-  if (!$('#panneau').classList.contains('ouvert') && !$('[data-vue="demarchage"]').hidden) chargerProspects();
-}, 30000);
+// Chaque actualisation compte comme une exécution n8n : on recharge quand tu reviens sur l'onglet,
+// et toutes les 5 minutes s'il reste ouvert devant toi.
+function actualiser() {
+  if (document.hidden || $('#panneau').classList.contains('ouvert')) return;
+  const vue = $$('[data-vue]').find((v) => !v.hidden)?.dataset.vue;
+  const silence = () => {};
+  if (vue === 'tableau') chargerTableau().catch(silence);
+  else if (vue === 'demarchage') chargerProspects().catch(silence);
+  else chargerEtat().catch(silence);
+}
+if (MDP) {
+  const depart = ['tableau', 'demarchage', 'n8n'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'demarchage';
+  afficher(depart);
+  let derniere = Date.now();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - derniere > 60000) { derniere = Date.now(); actualiser(); }
+  });
+  setInterval(() => { derniere = Date.now(); actualiser(); }, 5 * 60000);
+}

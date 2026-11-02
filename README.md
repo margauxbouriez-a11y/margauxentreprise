@@ -8,51 +8,45 @@ de chaque email envoyé par ton workflow **n8n**.
 | --- | --- |
 | Tableau de bord | Nombre d'entreprises, emails envoyés sur 7 jours, taux de réponse, relances à faire, répartition par secteur, dernières activités |
 | Démarchage | Entreprises démarchées + contact (nom, poste, email, téléphone), statut (à contacter → contactée → relancée → a répondu → RDV → cliente), historique, notes, export CSV |
-| Automatisation n8n | Le nœud n8n à copier-coller, ton adresse et ta clé, le workflow complet à télécharger |
+| Automatisation n8n | Le nœud n8n à copier-coller, l'adresse et la clé, le workflow complet à télécharger |
 | Clients, Projets | Prochains modules |
 
-Aucune dépendance à installer : il suffit de **Node.js 22.9 ou plus récent** (la base SQLite est intégrée à Node).
+## Fonctionnement (100 % gratuit)
 
----
+- **Les pages** (`index.html`, `connexion.html`, `app.js`, `styles.css`) sont publiées par **GitHub Pages**.
+- **Les données et les règles** sont dans ton **n8n** :
+  - workflow **« Margaux Entreprise — API »** (doit rester **publié**) ;
+  - tables **`margaux_prospects`** et **`margaux_activites`**.
+- L'adresse de l'API est dans `config.js`.
 
-## Lancer en local
+Le **mot de passe** de l'interface, la **clé** des automatisations, le délai de relance (4 jours) et le nombre
+maximum d'emails par entreprise (3) se règlent en haut du nœud **Traiter la demande** de ce workflow.
+Ils ne sont jamais écrits dans ce dépôt, qui est public.
 
-```bash
-cp .env.example .env      # puis modifie les valeurs
-npm start                 # http://localhost:3000
-```
+## Mise en ligne
 
-## Mettre en ligne (Render)
-
-1. Sur [render.com](https://render.com) : **New → Blueprint**, choisis ce dépôt. Le fichier `render.yaml` configure tout.
-2. Renseigne `ADMIN_PASSWORD`. La clé n8n et le secret de session sont générés automatiquement.
-3. Ajoute `PUBLIC_URL` avec l'adresse que Render te donne (ex. `https://margauxentreprise.onrender.com`).
-
-> La base de données est un fichier : il faut un **disque persistant** (inclus dans `render.yaml`, offre payante de Render),
-> sinon les données sont effacées à chaque redéploiement. Le `Dockerfile` permet aussi d'héberger la plateforme
-> ailleurs (Railway, Fly.io, un VPS) en montant un volume sur `/data`.
+**Settings → Pages → Deploy from a branch → `main` / `(root)` → Save.**
+La plateforme est alors sur `https://margauxbouriez-a11y.github.io/margauxentreprise/`.
 
 ---
 
 ## Connecter n8n
 
-Toutes les requêtes de n8n portent l'en-tête `X-API-Key: <ta clé N8N_API_KEY>`.
+Toutes les demandes vont à **une seule adresse** (celle de `config.js`), en `POST`, avec l'en-tête
+`X-API-Key: <ta clé>` (ou un champ `"cle"` dans le corps). Le champ **`action`** indique quoi faire.
 
 ### Option 1 — Tu as déjà un workflow qui envoie les emails
 
 Ajoute **un seul nœud HTTP Request** juste après ton nœud d'envoi (Gmail, Send Email, Outlook…).
-L'onglet *Automatisation n8n* de la plateforme te donne ce nœud déjà rempli avec ton adresse et ta clé :
-copie-le, colle-le dans n8n, relie-le. Le fichier modèle est [`n8n/noeud-email-envoye.json`](n8n/noeud-email-envoye.json).
-
-Il envoie à la plateforme :
+L'onglet *Automatisation n8n* de la plateforme te le donne déjà rempli : copie-le, colle-le dans n8n, relie-le.
+Le modèle est [`n8n/noeud-email-envoye.json`](n8n/noeud-email-envoye.json).
 
 ```json
-POST /api/n8n/email-envoye
-{ "email": "contact@entreprise.fr", "entreprise": "Nom", "contact_nom": "Prénom Nom", "secteur": "Expertise comptable", "objet": "Premier contact" }
+{ "action": "n8n_email_envoye", "email": "contact@entreprise.fr", "entreprise": "Nom", "contact_nom": "Prénom Nom", "secteur": "Expertise comptable", "objet": "Premier contact" }
 ```
 
 Si l'entreprise n'existe pas encore, elle est créée. Son statut passe à *Contactée* (puis *Relancée* au 2e email),
-le compteur d'emails augmente et une relance est programmée `RELANCE_JOURS` jours plus tard.
+le compteur d'emails augmente et une relance est programmée 4 jours plus tard.
 
 > Dans le champ Body du nœud, remplace `Prospects à contacter` par le nom de **ton** nœud qui contient l'email du destinataire.
 
@@ -60,25 +54,31 @@ le compteur d'emails augmente et une relance est programmée `RELANCE_JOURS` jou
 
 [`n8n/workflow-demarchage.json`](n8n/workflow-demarchage.json) (ou le bouton *Télécharger le workflow complet* dans la plateforme, déjà rempli) :
 
-- **9 h, du lundi au vendredi** : récupère jusqu'à 20 entreprises « À contacter » → envoie le premier email (Gmail) → enregistre l'envoi.
-- **10 h, du lundi au vendredi** : récupère les relances du jour → envoie la relance → enregistre l'envoi.
-- Après `MAX_EMAILS_PAR_PROSPECT` emails sans réponse, l'entreprise n'est plus relancée.
+- **9 h, du lundi au vendredi** : récupère jusqu'à 20 entreprises « À contacter » → envoie le premier email (Gmail) → enregistre tous les envois en une fois.
+- **10 h, du lundi au vendredi** : récupère les relances du jour → envoie la relance → enregistre les envois.
+- Après 3 emails sans réponse, l'entreprise n'est plus relancée.
 
 Après l'import : connecte ton compte Gmail dans les deux nœuds d'envoi et remplace `[Ton prénom]`, `[Nom de ton entreprise]`
 et `[Ton téléphone]` dans la signature.
 
-### Tous les points d'entrée pour n8n
+### Toutes les actions pour n8n
 
-| Méthode et adresse | Rôle |
+| `action` | Rôle |
 | --- | --- |
-| `POST /api/n8n/email-envoye` | Un email vient de partir : crée l'entreprise si besoin, compte l'envoi, programme la relance |
-| `GET /api/n8n/prospects?limit=20&secteur=…` | Entreprises « À contacter » qui ont un email |
-| `GET /api/n8n/relances?limit=20` | Entreprises à relancer aujourd'hui |
-| `POST /api/n8n/prospects` | Ajoute ou met à jour une entreprise ou une liste (dédoublonnage par email) |
-| `POST /api/n8n/reponse` | Une entreprise a répondu : `{ "email": "...", "extrait": "..." }` → statut « A répondu » |
+| `n8n_email_envoye` | Un email vient de partir : crée l'entreprise si besoin, compte l'envoi, programme la relance. Accepte aussi `"envois": [ … ]` pour en enregistrer plusieurs en une seule fois |
+| `n8n_prospects` | Entreprises « À contacter » qui ont un email (options : `limit`, `secteur`, `statut`) |
+| `n8n_relances` | Entreprises à relancer aujourd'hui (option : `limit`) |
+| `n8n_ajouter` | Ajoute ou met à jour une entreprise ou une liste `"prospects": [ … ]` (dédoublonnage par email) |
+| `n8n_reponse` | Une entreprise a répondu : `{ "email": "...", "extrait": "..." }` → statut « A répondu » |
 
 Les champs acceptent les noms français ou anglais (`entreprise`/`company`, `contact_nom`/`name`, `ville`/`city`, `secteur`/`industry`…),
 ce qui permet d'envoyer directement des lignes venant de Google Sheets, Apollo, Hunter, etc.
+
+### Exécutions n8n
+
+Chaque demande à l'API compte comme une exécution n8n. La plateforme charge tout l'écran en une seule demande
+et ne s'actualise qu'en revenant sur l'onglet ou toutes les 5 minutes ; le workflow de démarchage enregistre
+tous les emails d'une matinée en une seule demande.
 
 ---
 
@@ -92,9 +92,9 @@ le champ *Secteur* permet de comparer les taux de réponse dans le tableau de bo
 ## Structure
 
 ```
-server.js              Routes, connexion, API de l'interface et API n8n
-db.js                  Base SQLite (tables prospects et activites)
-lib/mini-serveur.js    Petit serveur web sans dépendance
-public/                Interface (index.html, app.js, styles.css, connexion.html)
-n8n/                   Nœud et workflow n8n à importer
+index.html, connexion.html   Pages de la plateforme
+app.js, styles.css           Interface
+config.js                    Adresse de l'API n8n
+n8n/api-code.js              Copie de la logique du nœud « Traiter la demande » (sans mot de passe ni clé)
+n8n/*.json                   Nœud et workflow de démarchage à importer
 ```

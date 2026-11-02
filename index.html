@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="fr">
 <head>
+  <meta name="robots" content="noindex">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Plateforme — Margaux Entreprise</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f2e2a'/%3E%3Ccircle cx='10' cy='16' r='4' fill='%23e8a33d'/%3E%3Ccircle cx='22' cy='10' r='3' fill='%23fff'/%3E%3Ccircle cx='22' cy='22' r='3' fill='%23fff'/%3E%3Cpath d='M13.5 14.5 19.5 11M13.5 17.5l6 3.5' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -69,7 +70,7 @@
           <p>Les entreprises démarchées et leurs contacts. Les envois faits par n8n s'ajoutent ici automatiquement.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="btn" href="/api/export.csv">Exporter en CSV</a>
+          <button class="btn" id="exporter">Exporter en CSV</button>
           <button class="btn principal" id="ajouter">Ajouter une entreprise</button>
         </div>
       </div>
@@ -101,11 +102,7 @@
           <h1>Automatisation n8n</h1>
           <p>Relie ton workflow d'envoi d'emails à la plateforme : chaque email envoyé met à jour l'onglet Démarchage.</p>
         </div>
-        <a class="btn ambre" href="/n8n/workflow-demarchage.json" download>Télécharger le workflow complet</a>
-      </div>
-
-      <div class="avertissement" id="alerte-cle" hidden style="margin-bottom:16px">
-        Ta clé de connexion est encore celle par défaut. Définis la variable <b>N8N_API_KEY</b> sur ton hébergement avant d'utiliser la plateforme en vrai.
+        <button class="btn ambre" id="telecharger-workflow">Télécharger le workflow complet</button>
       </div>
 
       <div class="etapes-n8n">
@@ -129,7 +126,7 @@
 
         <div class="carte etape-n8n">
           <h2>Lance ton workflow une fois</h2>
-          <p>Dès que le premier email part, l'entreprise apparaît dans Démarchage avec le statut « Contactée » et une relance prévue. Le témoin en bas de la barre latérale passe au vert.</p>
+          <p>Dès que le premier email part, l'entreprise apparaît dans Démarchage avec le statut « Contactée » et une relance prévue. Le témoin en bas de la barre latérale passe au vert. Toutes les demandes vont à la même adresse ; le champ <code>action</code> indique quoi faire.</p>
           <div>
             <table class="points">
               <tbody id="points"></tbody>
@@ -196,6 +193,7 @@
 </aside>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
