@@ -16,7 +16,9 @@ de chaque email envoyé par ton workflow **n8n**.
 - **Les pages** (`index.html`, `connexion.html`, `app.js`, `styles.css`) sont publiées par **GitHub Pages**.
 - **Les données et les règles** sont dans ton **n8n** :
   - workflow **« Margaux Entreprise — API »** (doit rester **publié**) ;
-  - tables **`margaux_prospects`** et **`margaux_activites`**.
+  - Data table **« Prospection – base »** (documents `prospects` et `activites`) : c'est la même base que les
+    workflows de prospection (recherche d'entreprises, emails trouvés, envois Gmail, réponses), donc tout ce
+    qu'ils font apparaît ici. Le code du nœud **Traiter la demande** est copié dans [`n8n/api-code.js`](n8n/api-code.js).
 - L'adresse de l'API est dans `config.js`.
 
 Le **mot de passe** de l'interface, la **clé** des automatisations, le délai de relance (4 jours) et le nombre
