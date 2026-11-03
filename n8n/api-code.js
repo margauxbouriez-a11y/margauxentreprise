@@ -1,8 +1,9 @@
 // Margaux Entreprise — logique de la plateforme (nœud Code du workflow « Margaux Entreprise — API »)
-// Reprend les règles de l'ancien serveur : statuts, relances, dédoublonnage par email, statistiques.
+// Les données sont celles de la Data table « Prospection – base » (documents « prospects » et « activites »),
+// la même base que les automatisations de prospection (recherche, emails trouvés, envois Gmail, réponses).
 
-const MOT_DE_PASSE = '__MOT_DE_PASSE__';   // connexion à l'interface
-const CLE_N8N = '__CLE_N8N__';             // clé des automatisations n8n (en-tête X-API-Key ou champ "cle")
+const MOT_DE_PASSE = 'Horizon-Relance-5181-Kq7m';   // connexion à l'interface
+const CLE_N8N = '21c1d3fb0e94cbe56a4a9aaea817404973ea32543e001c72';             // clé des automatisations n8n (en-tête X-API-Key ou champ "cle")
 const RELANCE_JOURS = 4;                   // jours avant la relance
 const MAX_EMAILS = 3;                      // emails maximum par entreprise
 
@@ -20,25 +21,41 @@ b = b || {};
 const entetes = req.headers || {};
 const action = String(b.action || (req.query || {}).action || '');
 
-// ---------- Données ----------
+// ---------- Base partagée ----------
+const base = {};
+for (const r of $('Lire la base').all().map((i) => i.json)) if (r && r.doc) base[r.doc] = r;
+const lireDoc = (d) => { try { const x = JSON.parse((base[d] && base[d].data) || '[]'); return Array.isArray(x) ? x : []; } catch (e) { return []; } };
+const brutsP = lireDoc('prospects');
+const brutsA = lireDoc('activites');
+
 const vide = (v) => (v === null || v === undefined ? '' : String(v));
-const prospects = $('Lire les prospects').all().map((i) => i.json).filter((r) => r && r.uid).map((r) => {
-  const p = {};
-  for (const c of COLONNES) p[c] = c === 'emails_envoyes' ? Number(r[c]) || 0 : vide(r[c]);
+const origines = new Map(); // uid -> objet d'origine (garde siren, effectif, recherche…)
+const prospects = brutsP.filter((r) => r && r.id != null).map((r) => {
+  const p = { uid: String(r.id) };
+  for (const c of CHAMPS) p[c] = vide(r[c]);
+  p.emails_envoyes = Number(r.emails_envoyes) || 0;
+  p.dernier_contact = vide(r.dernier_contact);
+  p.cree_le = vide(r.created_at);
+  p.modifie_le = vide(r.updated_at);
   p._ordre = Number(r.id) || 0;
+  origines.set(p.uid, r);
   return p;
 });
-const activites = $('Lire les activités').all().map((i) => i.json).filter((r) => r && r.uid)
-  .map((r) => ({ uid: r.uid, prospect_uid: vide(r.prospect_uid), type: vide(r.type), detail: vide(r.detail), source: vide(r.source), cree_le: vide(r.cree_le), _ordre: Number(r.id) || 0 }));
+const activites = brutsA.filter((r) => r && r.id != null).map((r) => ({
+  uid: String(r.id), prospect_uid: r.prospect_id == null ? '' : String(r.prospect_id), type: vide(r.type),
+  detail: vide(r.detail), source: vide(r.source), cree_le: vide(r.created_at), _ordre: Number(r.id) || 0,
+}));
 
 const parUid = new Map(prospects.map((p) => [p.uid, p]));
-let compteur = 1e12;
-const insertsP = new Set(), majP = new Set(), suppP = new Set(), insertsA = [];
+let prochainP = prospects.reduce((m, p) => Math.max(m, p._ordre), 0) + 1;
+let prochainA = activites.reduce((m, a) => Math.max(m, a._ordre), 0) + 1;
+const suppP = new Set();
+let changeP = false, changeA = false;
 
-const maintenant = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
-const dansJours = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-const aujourdhui = () => new Date().toISOString().slice(0, 10);
-const nouvelUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const maintenant = () => new Date().toISOString();
+const jourParis = (d = new Date()) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(d);
+const dansJours = (n) => { const d = new Date(jourParis() + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const aujourdhui = () => jourParis();
 const erreur = (code, message) => Object.assign(new Error(message), { code });
 
 // Champs acceptés en français ou en anglais (n8n, Google Sheets, Apollo…)
@@ -68,16 +85,17 @@ function normaliser(brut = {}) {
   return out;
 }
 
-const parEmail = (email) => email ? prospects.find((p) => p.email && p.email === String(email).toLowerCase().trim()) : undefined;
+const parEmail = (email) => email ? prospects.find((p) => !suppP.has(p.uid) && p.email && p.email === String(email).toLowerCase().trim()) : undefined;
 function trouver(brut) {
   if (brut.id) return parUid.get(String(brut.id));
   return parEmail(normaliser(brut).email);
 }
 
 function journal(prospectUid, type, detail, source = 'manuel') {
-  const a = { uid: nouvelUid(), prospect_uid: prospectUid || '', type, detail: detail || '', source, cree_le: maintenant(), _ordre: compteur++ };
+  const a = { uid: String(prochainA), prospect_uid: prospectUid || '', type, detail: detail || '', source, cree_le: maintenant(), _ordre: prochainA };
+  prochainA++;
   activites.push(a);
-  insertsA.push(a);
+  changeA = true;
 }
 
 function creer(data, source) {
@@ -88,13 +106,12 @@ function creer(data, source) {
   const p = {};
   for (const c of COLONNES) p[c] = '';
   for (const c of CHAMPS) if (data[c] !== undefined) p[c] = data[c];
-  p.uid = nouvelUid();
+  p.uid = String(prochainP); p._ordre = prochainP; prochainP++;
   p.statut = p.statut || 'a_contacter';
   p.source = data.source || source;
   p.emails_envoyes = 0;
   p.cree_le = p.modifie_le = maintenant();
-  p._ordre = compteur++;
-  prospects.push(p); parUid.set(p.uid, p); insertsP.add(p.uid);
+  prospects.push(p); parUid.set(p.uid, p); changeP = true;
   journal(p.uid, 'creation', `Prospect ajouté : ${p.entreprise}`, source);
   return p;
 }
@@ -104,7 +121,7 @@ function modifier(p, data) {
   if (!cols.length) return p;
   for (const c of cols) p[c] = data[c] === '' ? '' : data[c];
   p.modifie_le = maintenant();
-  majP.add(p.uid);
+  changeP = true;
   return p;
 }
 
@@ -114,12 +131,12 @@ function enregistrerEmail(p, objet, source) {
   p.dernier_contact = maintenant();
   p.prochaine_relance = dansJours(RELANCE_JOURS);
   p.modifie_le = maintenant();
-  majP.add(p.uid);
+  changeP = true;
   journal(p.uid, 'email_envoye', objet ? `Email envoyé : « ${objet} »` : 'Email envoyé', source);
   return p;
 }
 
-// Présentation pour l'interface et pour n8n (mêmes noms de champs que l'ancien serveur)
+// Présentation pour l'interface et pour n8n
 const sortie = (p) => {
   const o = { id: p.uid };
   for (const c of COLONNES) if (c !== 'uid' && c !== 'cree_le' && c !== 'modifie_le') o[c] = p[c] === '' ? null : p[c];
@@ -141,7 +158,7 @@ function statistiques() {
   for (const p of liste) parStatut[p.statut] = (parStatut[p.statut] || 0) + 1;
   const total = liste.length;
   const emails = liste.reduce((s, p) => s + (Number(p.emails_envoyes) || 0), 0);
-  const il7j = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 19).replace('T', ' ');
+  const il7j = new Date(Date.now() - 7 * 864e5).toISOString();
   const il13j = new Date(Date.now() - 13 * 864e5).toISOString().slice(0, 10);
   const envois = activites.filter((a) => a.type === 'email_envoye');
   const emails7j = envois.filter((a) => a.cree_le >= il7j).length;
@@ -160,31 +177,42 @@ function statistiques() {
   return {
     total, parStatut, emails, emails7j, relancesDues,
     parSecteur: Object.values(secteurs).sort((x, y) => y.n - x.n),
-    parJour: Object.entries(jours).map(([jour, n]) => ({ jour, n })),
+    parJour: Object.entries(jours).sort(([x], [y]) => x.localeCompare(y)).map(([jour, n]) => ({ jour, n })),
     tauxReponse: contactes ? Math.round((reponses / contactes) * 100) : 0,
   };
 }
 
-// ---------- Réponse + écritures à faire ----------
+// ---------- Réponse + documents à réécrire ----------
+const nul = (v) => (v === '' || v === undefined ? null : v);
+function docProspects() {
+  return prospects.filter((p) => !suppP.has(p.uid)).map((p) => {
+    const o = { ...(origines.get(p.uid) || {}) };
+    o.id = Number(p.uid);
+    for (const c of CHAMPS) o[c] = nul(p[c]);
+    o.statut = p.statut || 'a_contacter';
+    o.entreprise = p.entreprise;
+    o.emails_envoyes = Number(p.emails_envoyes) || 0;
+    o.dernier_contact = nul(p.dernier_contact);
+    o.created_at = nul(p.cree_le);
+    o.updated_at = nul(p.modifie_le);
+    return o;
+  });
+}
+function docActivites() {
+  return activites.filter((a) => !a.prospect_uid || !suppP.has(a.prospect_uid)).map((a) => ({
+    id: Number(a.uid), prospect_id: a.prospect_uid ? Number(a.prospect_uid) : null, type: a.type,
+    detail: a.detail, source: a.source, created_at: a.cree_le,
+  }));
+}
 function fin(code, reponse) {
-  const ops = [];
-  for (const uid of insertsP) if (!suppP.has(uid)) ops.push({ op: 'prospect_ajouter', ...ligneP(parUid.get(uid)) });
-  for (const uid of majP) if (!insertsP.has(uid) && !suppP.has(uid)) ops.push({ op: 'prospect_modifier', ...ligneP(parUid.get(uid)) });
-  for (const uid of suppP) if (!insertsP.has(uid)) ops.push({ op: 'prospect_supprimer', uid }, { op: 'historique_supprimer', prospect_uid: uid });
-  for (const a of insertsA) if (!a.prospect_uid || !suppP.has(a.prospect_uid)) {
-    ops.push({ op: 'activite_ajouter', uid: a.uid, prospect_uid: a.prospect_uid, type: a.type, detail: a.detail, source: a.source, cree_le: a.cree_le });
-  }
-  if (!ops.length) ops.push({ op: 'rien' });
-  ops[0]._code = code;
-  ops[0]._reponse = JSON.stringify(reponse);
-  return ops.map((o) => ({ json: o }));
+  const commun = { _code: code, _reponse: JSON.stringify(reponse) };
+  const docs = [];
+  if (changeP || suppP.size) docs.push({ doc: 'prospects', data: JSON.stringify(docProspects()) });
+  if (changeA || suppP.size) docs.push({ doc: 'activites', data: JSON.stringify(docActivites()) });
+  if (!docs.length) return [{ json: { ...commun, aEcrire: false } }];
+  return docs.map((d) => ({ json: { ...commun, aEcrire: true, ...d, version: ((base[d.doc] && Number(base[d.doc].version)) || 0) + 1 } }));
 }
-function ligneP(p) {
-  const l = {};
-  for (const c of COLONNES) l[c] = c === 'emails_envoyes' ? Number(p[c]) || 0 : vide(p[c]);
-  return l;
-}
-const remiseAZero = () => { insertsP.clear(); majP.clear(); suppP.clear(); insertsA.length = 0; };
+const remiseAZero = () => { changeP = false; changeA = false; suppP.clear(); };
 
 // ---------- Actions ----------
 try {
@@ -250,7 +278,7 @@ try {
       const texte = String(b.texte || '').trim();
       if (!texte) throw erreur(400, 'La note est vide.');
       journal(p.uid, 'note', texte);
-      p.modifie_le = maintenant(); majP.add(p.uid);
+      p.modifie_le = maintenant(); changeP = true;
       return fin(200, { ok: true });
     }
 
@@ -288,7 +316,6 @@ try {
     }
 
     case 'n8n_email_envoye': {
-      // Un envoi, ou plusieurs d'un coup avec "envois": [...] (une seule exécution n8n)
       const envois = Array.isArray(b.envois) ? b.envois : [b];
       const faits = [];
       for (const e of envois) {
